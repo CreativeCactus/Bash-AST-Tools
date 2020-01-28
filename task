@@ -1,0 +1,18 @@
+## Top level comment
+build(){ ## Build the program
+	dgo go build .
+}
+run(){ ## Run
+	noDescription(){
+		: ## Does nothing
+	}
+	docker(){ ## Run inside docker
+		dgo go run main.go
+	}
+	## Defaults to running the binary
+	default(){ ## Run the binary
+		./bash_ast task | column -ts'#'
+	}
+	"${@:-default}"
+}
+
