@@ -1,4 +1,4 @@
-module bash_ast
+module sh_comments
 
 go 1.13
 

@@ -1,6 +1,10 @@
 ## Top level comment
+## Second level comment
 build(){ ## Build the program
-	dgo go build .
+	pushd sh_comments
+	dgo go build -ldflags "-X main.commitHash=$(git rev-list -1 HEAD)"
+	mv sh_comments ../shcom
+	popd
 }
 run(){ ## Run
 	noDescription(){
@@ -11,7 +15,11 @@ run(){ ## Run
 	}
 	## Defaults to running the binary
 	default(){ ## Run the binary
-		./bash_ast task | column -ts'#'
+		./shcom task
+		echo "###"
+		./shcom task run #| column -ts'#'
+		echo "###"
+		./shcom task 'run *' | column -ts'#'
 	}
 	"${@:-default}"
 }
