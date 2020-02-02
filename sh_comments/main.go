@@ -9,15 +9,19 @@ import (
 )
 
 type conf struct {
-	Depth int
-	Prefix string
-	Extended bool
+	Depth int // How deep should we recurse?
+	Root bool // Should we print the root node(s)?
+	Prefix string // Should we indent lines with a prefix?
+	Extended bool // Should we show comments?
 }
 func (c *conf) Add (a string) {
 	if len(a)<1 {
 		return
 	}
 	switch a[1] {
+	case 'h':
+		help()
+		os.Exit(0)
 	case '0':
 		c.Depth = 0
 	case '1':
@@ -30,6 +34,10 @@ func (c *conf) Add (a string) {
 		c.Extended = true
 	case 'c':
 		c.Extended = false
+	case 'r':
+		c.Root = true
+	case 'R':
+		c.Root = false
 	case 'p':
 		c.Prefix = a[2:]
 	default:
@@ -37,14 +45,18 @@ func (c *conf) Add (a string) {
 	}
 }
 
+// TODO Glob name matching on query eg "run* " returns all subs of run and runtime
 
 // shcom file "a b " # prints functions and comments under the b function inside the a function
 // shcom file "a b"  # suggests function names prints functions and comments under the b function inside the a function
 // shcom -3 file -c -p"AA" # prints 3 levels deep from the root in compact mode, indenting with AA
+const verbose = false
 func main(){
 	config := conf{ // Default config
-		Depth: 1,
+		Depth: 0,
 		Prefix: "  ",
+		Root: true,
+		Extended: false,
 	}
 
 	args := os.Args[1:]
@@ -75,38 +87,20 @@ func main(){
 	}
 
 	result := Root(sh, opts[0])
-	//fmt.Printf("%#v\n", result)
+	piv("%#v\n", result)
 
 	query := []string{}
 	for _, v := range opts[1:] {
 		query = append(query, strings.Split(v, " ")...)
 	}
 
-	//fmt.Printf("%#v\n", query)
-	result.QueryPath(query).Print(config.Depth, config.Extended, config.Prefix)
-
-
-
-/*
-	results := []FunctionDescriptor{}
-	syntax.Walk(sh, func(node syntax.Node) bool {
-		switch n := node.(type) {
-		case *syntax.Comment:
-			if n.Text[0]=='#' {
-				fmt.Printf(" %s\n", n.Text)
-			}
-		case *syntax.FuncDecl:
-			results = append(results, getFunction(n))
-			// fmt.Printf("%s", n.Name.Value)
-			return false
-		default:
-			//fmt.Printf("%+v", n)
-			break
-		}
-		return true // traverse down into
-	})
-
-*/
+	piv("%#v\n", query)
+	piv("%#v\n", config)
+	if config.Root {
+		result.QueryPath(query).Print(config.Depth, config.Extended, config.Prefix)
+		return
+	}
+	result.QueryPath(query).PrintUnder(config.Depth, config.Extended, config.Prefix)
 }
 type FuncGroup []FuncScope
 type FuncScope struct {
@@ -141,25 +135,55 @@ func (fs FuncScope) Match(name string, exact bool) bool {
 // Query returns the FuncGroup of FS under this FS which match a partial or exact name part
 func (fs FuncScope) Query(part string, exact bool) (res FuncGroup) {
 	for _, v := range fs.Nested {
-		if !v.Match(part, exact) {
-			continue
+		if v.Match(part, exact) {
+			res = append(res, v)
 		}
-		res = append(res, v)
 	}
 	return
+}
+// QueryPath returns the FuncGroup of FS which are deeply nested according to the path query
+func (fg FuncGroup) QueryPath(path []string) (res FuncGroup) {
+	if len(path) == 0 {
+		return fg
+	}
+	if len(path) == 1 {
+		piv("Partialg: %s from %d\n", path[0], len(fg))
+		return fg.Query(path[0], false)
+	}
+	// There must be more parts to follow, which means that we only want exact matches
+	piv("Exactg: %s\n", path[0])
+	res = fg.Query(path[0], true)
+	return res.QueryPath(path[1:])
 }
 // QueryPath returns the FuncGroup of FS which are deeply nested according to the path query
 func (fs FuncScope) QueryPath(path []string) (res FuncGroup) {
 	if len(path) == 0 {
 		return FuncGroup{ fs }
 	}
-	res = fs.Query(path[0], false)
 	if len(path) == 1 {
-		return
+		piv("Partial: %s\n", path[0])
+		return fs.Query(path[0], false)
 	}
 	// There must be more parts to follow, which means that we only want exact matches
-	return res.Query(path[0], true)
+	res = fs.Query(path[0], true)
+	piv("Exact: %s\n", path[0])
+	return res.Collect().QueryPath(path[1:])
 }
+// Collect returns the sum of all nested fs from each fs in the fg
+func (fg FuncGroup) Collect() (res FuncGroup) {
+	for _, v := range fg {
+		res = append(res, v.Nested...)
+	}
+	return
+}
+
+// PrintUnder shows the content of the FSs but not their own root nodes
+func (fg FuncGroup) PrintUnder(nested int, extended bool, indent string) {
+	for _, v := range fg {
+		v.PrintUnder(nested, extended, indent)
+	}
+}
+// Print calls Print on each underlying FS of this FG
 func (fg FuncGroup) Print(nested int, extended bool, indent string) {
 	for _, v := range fg {
 		v.Print(nested, extended, indent)
@@ -185,66 +209,6 @@ func (fs FuncScope) Print(nested int, extended bool, indent string) {
 		v.Print(nested-1, extended, indent)
 	}
 }
-/*
-		fmt.Printf("%s\t%s\n",v.Name,v.Desc)
-		if extended {
-			for _, w := range v.Comments {
-				fmt.Printf("\t%s\n",w)
-			}
-		}
-		if nested==0 {
-			continue
-		}
-		for _, n := range v.Nested {
-			n.Print(nested-1, extended)
-		}
-
-
-// Replace with direct call to in/on
-func Describe(root syntax.Node, path []string) (fs FuncScope, err error) {
-	breakWalk := false
-	firstNode := true
-	notFirst := func(){
-		firstNode = false
-	}
-	if len(path) > 0 {
-		err, fs = WalkIn(root, path)
-		if err != nil {
-			fmt.Println("Error bad 79")
-		}
-		return err, fd
-	}
-	err, df = WalkOn(root)
-	if err != nil {
-		fmt.Println("Error bad 85")
-	}
-	return err, df
-}
-*/
-/*
-func WalkOn(root *syntax.Node)  (fs FuncScope) {
-	firstNode := true
-	syntax.Walk(root, func(node syntax.Node) bool {
-		if first {
-			first = false
-			return true
-		}
-		switch n := node.(type) {
-		case *syntax.FuncDecl:
-			fs.Nested = WalkOne{ Name: n.Name.Value }
-			return false
-		case *syntax.Comment:
-			if n.Text[0]=='#' {
-				if n.Pos().Line() == fd.Line {
-					fd.Desc = n.Text
-				} else {
-					fs.Comments = append(fs.Comments, n.Text)
-				}
-			}
-		}
-	})
-}
-*/
 func Root(root syntax.Node, name string) (fs FuncScope) {
 	fs = Walk(root, root, 0)
 	fs.Name = name
@@ -256,7 +220,6 @@ func Walk(root, node syntax.Node, level int) (fs FuncScope) {
 	fs.Root = &root
 	fs.Node = &node
 	fs.Depth = level
-	// Could set a default name, desc here
 	fs.Line = node.Pos().Line()
 
 	syntax.Walk(node, func (node syntax.Node) bool {
@@ -283,59 +246,29 @@ func Walk(root, node syntax.Node, level int) (fs FuncScope) {
 	})
 	return
 }
-/*
-func getFunction(n *syntax.FuncDecl, path []string) (fd FunctionDescriptor) {
-	breakWalk := false
-	firstNode := true
-	fd.Root = n
-	fd.Name = n.Name.Value
-	fd.Line = n.Pos().Line()
-
-	syntax.Walk(n, func(node syntax.Node) bool {
-		if breakWalk {
-			return false
-		}
-		defer func(){
-			firstNode = false
-		}()
-		switch n := node.(type) {
-		case *syntax.FuncDecl:
-			if firstNode {
-				return true
-			}
-			if len(path) > 0 && path[0] == n.Name.Value {
-				fd = getFunction(n, path[1:])
-				breakWalk = true
-				return true
-			}
-			return false
-		case *syntax.Comment:
-			if n.Text[0]=='#' {
-				if n.Pos().Line() == fd.Line {
-					fd.Desc = n.Text
-				} else {
-	                                fd.Comments = append(fd.Comments, n.Text)
-				}
-                        }
-		}
-		//fmt.Println("node")
-		return true
-	})
-	return fd
-}
-*/
 var version = `0.0.1`
 var commitHash string
 func help(){
-	stderrf(`shcom: CC/bash_ast/sh_comments v%s-%s\n`, version, commitHash)
-	stderrf(` usage: %s file "query" \n`, os.Args[0])
-	stderrf(` Reads file, scopes to a query if provided\n`)
-	stderrf(` Prints function names and ## comments matching the query in file\n`)
-	stderrf(` Query is a space-delimited list of nested functions in file\n`)
-	stderrf(` If query ends in a space then functions and comments under the query are listed\n`)
-	stderrf(` Otherwise functions matching the partial query will be shown instead\n`)
-	stderrf(` Nothing is printed if the query does not match any function in the file\n`)
+	stderrfln(`shcom: CC/bash_ast/sh_comments v%s-%s`, version, commitHash)
+	stderrfln(` usage: %s file "query" `, os.Args[0])
+	stderrfln(` Reads file, scopes to a query if provided`)
+	stderrfln(` Prints function names and ## comments matching the query in file`)
+	stderrfln(` Query is a space-delimited list of nested functions in file`)
+	stderrfln(` If query ends in a space then functions and comments under the query are listed`)
+	stderrfln(` Otherwise functions matching the partial query will be shown instead`)
+	stderrfln(` Nothing is printed if the query does not match any function in the file`)
+}
+func stderrfln(s string, arg ...interface{}) {
+	stderrf(fmt.Sprintf("%s\n",s), arg...)
 }
 func stderrf(s string, arg ...interface{}) {
 	fmt.Fprintf(os.Stderr, s, arg...)
 }
+// Print if verbose
+func piv(s string, arg ...interface{}) {
+	if !verbose {
+		return
+	}
+	fmt.Printf(s, arg...)
+}
+

@@ -6,6 +6,9 @@ build(){ ## Build the program
 	mv sh_comments ../shcom
 	popd
 }
+runtime(){ ## Run with timestamp
+	time run
+}
 run(){ ## Run
 	noDescription(){
 		: ## Does nothing
