@@ -159,7 +159,7 @@ func (fg FuncGroup) QueryPath(path []string) (res FuncGroup) {
 	// There must be more parts to follow, which means that we only want exact matches
 	piv("Exactg: %s\n", path[0])
 	res = fg.Query(path[0], true)
-	return res.QueryPath(path[1:])
+	return res.Collect().QueryPath(path[1:])
 }
 // QueryPath returns the FuncGroup of FS which are deeply nested according to the path query
 func (fs FuncScope) QueryPath(path []string) (res FuncGroup) {
