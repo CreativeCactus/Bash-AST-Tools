@@ -43,11 +43,12 @@ ________docker # Run inside docker
 ________default # Run the binary
 ```
 
-- `./shcom -1 task "run" -R -p""` Depp query without showing the root nodes, without indentation
+- `./shcom -1 task "run" -R -p""` Deep query without showing the root nodes, without indentation
 ```
 noDescription 
 docker # Run inside docker
 default # Run the binary
 ```
 
-- FUTURE: Globbing function paths `./shcom -0 task "run* "`
+- FUTURE: `./shcom -0 task "run* "` Globbing function paths 
+
