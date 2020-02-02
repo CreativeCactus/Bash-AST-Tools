@@ -13,6 +13,7 @@ type conf struct {
 	Root bool // Should we print the root node(s)?
 	Prefix string // Should we indent lines with a prefix?
 	Extended bool // Should we show comments?
+	Compact bool // Should we print descriptions?
 }
 func (c *conf) Add (a string) {
 	if len(a)<1 {
@@ -32,8 +33,12 @@ func (c *conf) Add (a string) {
 		c.Depth = 3
 	case 'x':
 		c.Extended = true
-	case 'c':
+	case 'X':
 		c.Extended = false
+	case 'c':
+		c.Compact = true
+	case 'C':
+		c.Compact = false
 	case 'r':
 		c.Root = true
 	case 'R':
@@ -57,6 +62,7 @@ func main(){
 		Prefix: "  ",
 		Root: true,
 		Extended: false,
+		Compact: false,
 	}
 
 	args := os.Args[1:]
@@ -97,10 +103,10 @@ func main(){
 	piv("%#v\n", query)
 	piv("%#v\n", config)
 	if config.Root {
-		result.QueryPath(query).Print(config.Depth, config.Extended, config.Prefix)
+		result.QueryPath(query).Print(config.Depth, config)
 		return
 	}
-	result.QueryPath(query).PrintUnder(config.Depth, config.Extended, config.Prefix)
+	result.QueryPath(query).PrintUnder(config.Depth, config)
 }
 type FuncGroup []FuncScope
 type FuncScope struct {
@@ -178,26 +184,30 @@ func (fg FuncGroup) Collect() (res FuncGroup) {
 }
 
 // PrintUnder shows the content of the FSs but not their own root nodes
-func (fg FuncGroup) PrintUnder(nested int, extended bool, indent string) {
+func (fg FuncGroup) PrintUnder(nested int, c conf) {
 	for _, v := range fg {
-		v.PrintUnder(nested, extended, indent)
+		v.PrintUnder(nested, c)
 	}
 }
 // Print calls Print on each underlying FS of this FG
-func (fg FuncGroup) Print(nested int, extended bool, indent string) {
+func (fg FuncGroup) Print(nested int, c conf) {
 	for _, v := range fg {
-		v.Print(nested, extended, indent)
+		v.Print(nested, c)
 	}
 }
 // PrintUnder shows the content of a FS but not the current node
-func (fs FuncScope) PrintUnder(nested int, extended bool, indent string) {
-	FuncGroup(fs.Nested).Print(nested, extended, indent)
+func (fs FuncScope) PrintUnder(nested int, c conf) {
+	FuncGroup(fs.Nested).Print(nested, c)
 }
-// Print shows the content of a FS with an optional recursion depth, extended comments and indent string
-func (fs FuncScope) Print(nested int, extended bool, indent string) {
-	prefix := fmt.Sprintf("%s%s ", strings.Repeat(indent, fs.Depth), fs.Name)
-	fmt.Printf("%s%s\n", prefix, fs.Desc)
-	if extended {
+// Print shows the content of a FS with an optional recursion depth, extended comments and indent (prefix) string
+func (fs FuncScope) Print(nested int, c conf) {
+	prefix := fmt.Sprintf("%s%s ", strings.Repeat(c.Prefix, fs.Depth), fs.Name)
+	fmt.Printf("%s", prefix)
+	if !c.Compact {
+		fmt.Printf("%s", fs.Desc)
+	}
+	fmt.Printf("\n")
+	if c.Extended {
 		for _, w := range fs.Comments {
 			fmt.Printf("%s%s\n", strings.Repeat(" ", len(prefix)), w)
 		}
@@ -206,7 +216,7 @@ func (fs FuncScope) Print(nested int, extended bool, indent string) {
 		return
 	}
 	for _, v := range fs.Nested {
-		v.Print(nested-1, extended, indent)
+		v.Print(nested-1, c)
 	}
 }
 func Root(root syntax.Node, name string) (fs FuncScope) {
